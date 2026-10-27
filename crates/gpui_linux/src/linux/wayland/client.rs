@@ -1482,6 +1482,7 @@ impl WaylandConnection {
                 data_source.offer(mime_type.to_string());
             }
             data_source.offer(state.clipboard.self_mime());
+            crate::fast::wayland_clipboard::offer_images(&state.clipboard, &data_source);
             data_device.set_selection(Some(&data_source), serial.as_raw());
         }
     }

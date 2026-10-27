@@ -27,7 +27,7 @@ pub(crate) struct Clipboard {
     self_mime: String,
 
     // Internal clipboard
-    contents: Option<ClipboardItem>,
+    pub(crate) contents: Option<ClipboardItem>,
     primary_contents: Option<ClipboardItem>,
 
     // External clipboard
@@ -95,7 +95,7 @@ impl<T: ReceiveData> DataOffer<T> {
         }
     }
 
-    fn read_text(&self, connection: &Connection) -> Option<ClipboardItem> {
+    pub(crate) fn read_text(&self, connection: &Connection) -> Option<ClipboardItem> {
         let mime_type = self.mime_types.iter().find(|&mime_type| {
             ALLOWED_TEXT_MIME_TYPES
                 .iter()
@@ -117,7 +117,7 @@ impl<T: ReceiveData> DataOffer<T> {
         Some(ClipboardItem::new_string(result))
     }
 
-    fn read_image(&self, connection: &Connection) -> Option<ClipboardItem> {
+    pub(crate) fn read_image(&self, connection: &Connection) -> Option<ClipboardItem> {
         for format in ImageFormat::iter() {
             let mime_type = format.mime_type();
             if !self.has_mime_type(mime_type) {
@@ -174,20 +174,12 @@ impl Clipboard {
         self.self_mime.clone()
     }
 
-    pub fn send(&self, _mime_type: String, fd: OwnedFd) {
-        if let Some(text) = self.contents.as_ref().and_then(|contents| contents.text()) {
-            self.send_bytes(fd, text.as_bytes().to_owned());
-        }
+    pub fn send(&self, mime_type: String, fd: OwnedFd) {
+        crate::fast::wayland_clipboard::send(self, self.contents.as_ref(), &mime_type, fd);
     }
 
-    pub fn send_primary(&self, _mime_type: String, fd: OwnedFd) {
-        if let Some(text) = self
-            .primary_contents
-            .as_ref()
-            .and_then(|contents| contents.text())
-        {
-            self.send_bytes(fd, text.as_bytes().to_owned());
-        }
+    pub fn send_primary(&self, mime_type: String, fd: OwnedFd) {
+        crate::fast::wayland_clipboard::send(self, self.primary_contents.as_ref(), &mime_type, fd);
     }
 
     pub fn read(&mut self) -> Option<ClipboardItem> {
@@ -200,9 +192,7 @@ impl Clipboard {
             return self.contents.clone();
         }
 
-        let item = offer
-            .read_text(&self.connection)
-            .or_else(|| offer.read_image(&self.connection))?;
+        let item = crate::fast::wayland_clipboard::read(offer, &self.connection)?;
 
         self.cached_read = Some(item.clone());
         Some(item)
@@ -218,9 +208,7 @@ impl Clipboard {
             return self.primary_contents.clone();
         }
 
-        let item = offer
-            .read_text(&self.connection)
-            .or_else(|| offer.read_image(&self.connection))?;
+        let item = crate::fast::wayland_clipboard::read(offer, &self.connection)?;
 
         self.cached_primary_read = Some(item.clone());
         Some(item)
